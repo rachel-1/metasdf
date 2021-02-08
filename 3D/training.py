@@ -12,8 +12,7 @@ import numpy as np
 from tqdm.autonotebook import tqdm
 
 sys.path.append('..')
-from levelset_data import LevelsetDataset
-import levelset_data
+from . import levelset_data
 from torch.utils.tensorboard import SummaryWriter
 
 
