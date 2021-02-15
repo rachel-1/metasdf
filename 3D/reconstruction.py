@@ -9,73 +9,44 @@ import random
 import time
 import torch
 import sys
-import levelset_data
+from . import levelset_data
 
 torch.backends.cudnn.benchmark = True
 
 from meta_modules import *
 from modules import *
 
-max_batch = 2000000  # Make as big as your memory allows
-N=256
+def reconstruct(decoder, data, mesh_filename, context_mode, max_batch=2000000, N=256):
+    try:
+        reconstructed_sdf = generate_dense_cube(decoder, data, context_mode, max_batch, N)
+    except OSError as e:
+        print("OS Error: ", e)
+        return
 
-def reconstruct(decoder, npz_filenames, reconstruction_dir, context_mode, data_source, skip=True, test_time_optim_steps=None):
-    if not os.path.isdir(reconstruction_dir):
-        os.makedirs(reconstruction_dir)
+    print("reconstructed_sdf: ", reconstructed_sdf) # TODO(rachel0) - remove debug statement
+    print("data: ", data) # TODO(rachel0) - remove debug statement
+        
+    
+    if not os.path.exists(os.path.dirname(mesh_filename)):
+        os.makedirs(os.path.dirname(mesh_filename))
 
-    for ii, npz in enumerate(npz_filenames):
-        filename = os.path.splitext(npz)[0]
-        instance_name = '/'.join(filename.split('/')[1:])
-        sdf_filename = os.path.join(data_source, 'SdfSamples', filename) + '.npz'
-        levelset_filename = os.path.join(data_source, 'SurfaceSamples', filename) + '.ply'
-        partial_filename = os.path.join('/home/ericryanchan/depth_maps', instance_name, 'world_coords.ply')
-        normalization_params_filename = os.path.join(data_source, 'NormalizationParameters', filename) + '.npz'
-        if ("npz" not in npz or
-            not os.path.exists(sdf_filename)):
-            print("SDF Samples not found")
-            continue
-        if context_mode == 'levelset' and (not os.path.exists(levelset_filename) or not os.path.exists(normalization_params_filename)):
-            print("Levelset not found: ", levelset_filename)
-            continue
-        if context_mode == 'partial' and (not os.path.exists(partial_filename) or not os.path.exists(normalization_params_filename)):
-            print("Partial not found: ", partial_filename)
-            continue
-            
-        mesh_filename = os.path.join(reconstruction_dir, npz[:-4])
-        ply_filename = mesh_filename + '.ply'
+    #offset, scale = data['norm_params']
+    offset, scale = None, None
+        
+    voxel_origin = [-1, -1, -1]
+    voxel_size = 2.0 / (N - 1)
+    np.save('test.npy', reconstructed_sdf.data)
+    levelset_data.convert_sdf_samples_to_ply(
+        reconstructed_sdf.data,
+        voxel_origin,
+        voxel_size,
+        mesh_filename,
+        offset=offset,
+        scale=scale,
+        level=0.0
+    )
 
-        try:
-            reconstructed_sdf = generate_dense_cube(decoder, sdf_filename, levelset_filename, partial_filename, normalization_params_filename, context_mode, test_time_optim_steps=test_time_optim_steps)
-        except OSError as e:
-            print(e)
-            #print('OS Error?')
-            continue
-
-        ############ Output to PLY ##############
-        if not os.path.exists(os.path.dirname(mesh_filename)):
-            os.makedirs(os.path.dirname(mesh_filename))
-
-        voxel_origin = [-1, -1, -1]
-        voxel_size = 2.0 / (N - 1)
-
-
-        levelset_data.convert_sdf_samples_to_ply(
-            reconstructed_sdf.data,
-            voxel_origin,
-            voxel_size,
-            ply_filename,
-            offset=None,
-            scale=None,
-            level=0.0
-        )
-
-def generate_dense_cube(decoder, sdf_filename, levelset_filename, partial_filename, normalization_params_filename, context_mode, test_time_optim_steps=None):
-    data_sdf = levelset_data.read_sdf_samples_into_ram(sdf_filename, levelset_filename, partial_filename, normalization_params_filename, context_mode=context_mode)
-
-    ####### Set up data #########
-
-    sampled_data = levelset_data.unpack_sdf_samples_from_ram(data_sdf, subsampleSDF = 100000, subsampleLevelset = 10000)
-
+def generate_dense_cube(decoder, sampled_data, context_mode, max_batch, N, test_time_optim_steps=None):
     if context_mode == 'partial':
         meta_data = levelset_data.meta_split(sampled_data['sdf'].unsqueeze(0),
                                              sampled_data['partial'].unsqueeze(0),
