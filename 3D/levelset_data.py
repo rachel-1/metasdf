@@ -313,9 +313,9 @@ def convert_sdf_samples_to_ply(
         )
     except:
         pass
-    print("verts: ", verts) # TODO(rachel0) - remove debug statement
+
     np.save('verts.npy', verts)
-    print("faces: ", faces) # TODO(rachel0) - remove debug statement
+
     # transform from voxel coordinates to camera coordinates
     # note x and y are flipped in the output of marching_cubes
     mesh_points = np.zeros_like(verts)

@@ -22,27 +22,20 @@ def reconstruct(decoder, data, mesh_filename, context_mode, max_batch=2000000, N
     except OSError as e:
         print("OS Error: ", e)
         return
-
-    print("reconstructed_sdf: ", reconstructed_sdf) # TODO(rachel0) - remove debug statement
-    print("data: ", data) # TODO(rachel0) - remove debug statement
-        
     
     if not os.path.exists(os.path.dirname(mesh_filename)):
         os.makedirs(os.path.dirname(mesh_filename))
 
-    #offset, scale = data['norm_params']
-    offset, scale = None, None
-        
     voxel_origin = [-1, -1, -1]
     voxel_size = 2.0 / (N - 1)
-    np.save('test.npy', reconstructed_sdf.data)
+
     levelset_data.convert_sdf_samples_to_ply(
         reconstructed_sdf.data,
         voxel_origin,
         voxel_size,
         mesh_filename,
-        offset=offset,
-        scale=scale,
+        offset=data['norm_params']['offset'],
+        scale=data['norm_params']['scale'],
         level=0.0
     )
 
