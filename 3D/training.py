@@ -25,22 +25,11 @@ def train_epoch(model, dataloader, training_mode, context_mode, optimizer):
     epoch_train_loss = 0
 
     for data_dict, indices in dataloader:
-        sdf_tensor = data_dict['sdf'].cuda()
-        levelset_tensor = data_dict['levelset'].cuda()
+        meta_data = levelset_data.meta_split(data_dict, context_mode)
 
-        sdf_tensor.requires_grad = False
-        levelset_tensor.requires_grad = False
-
-        meta_data = levelset_data.meta_split(sdf_tensor, levelset_tensor, context_mode)
-        
         prediction, _ = model(meta_data)
-#         context_x, context_y = meta_batch['context']
-#         query_x, query_y = meta_batch['query']
-        
-#         fast_params = model.generate_params(context_x, context_y)
-#         prediction = model(query_x, fast_params)
         query_y = meta_data['query'][1]
-
+        
         if training_mode == 'multitask':
             gt_sign = (query_y > 0).float()
             pred_sign = torch.sigmoid(prediction[:, :, 0:1])
@@ -88,19 +77,10 @@ def val_epoch(model, dataloader, training_mode, context_mode):
     model.eval()
     for data_dict, indices in dataloader:
         with torch.no_grad():
-            sdf_tensor = data_dict['sdf'].cuda()
-            levelset_tensor = data_dict['levelset'].cuda()
+            meta_data = levelset_data.meta_split(data_dict, context_mode)
 
-            meta_data = levelset_data.meta_split(sdf_tensor, levelset_tensor, context_mode)            
-            
-#             context_x, context_y = meta_batch['context']
-#             query_x, query_y = meta_batch['query']
-            query_y = meta_data['query'][1]
-        
-        
             prediction, _ = model(meta_data)
-            # fast_params = model.generate_params(context_x, context_y)
-            # prediction = model(query_x, fast_params)
+            query_y = meta_data['query'][1]
 
             if training_mode == 'multitask':
                 gt_sign = (query_y > 0).float()

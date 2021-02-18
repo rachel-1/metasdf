@@ -16,7 +16,8 @@ torch.backends.cudnn.benchmark = True
 from meta_modules import *
 from modules import *
 
-def reconstruct(decoder, data, mesh_filename, context_mode, max_batch=2000000, N=256):
+#def reconstruct(decoder, data, mesh_filename, context_mode, max_batch=2000000, N=256):
+def reconstruct(decoder, data, mesh_filename, context_mode, max_batch=200000, N=256):
     try:
         reconstructed_sdf = generate_dense_cube(decoder, data, context_mode, max_batch, N)
     except OSError as e:
@@ -34,25 +35,21 @@ def reconstruct(decoder, data, mesh_filename, context_mode, max_batch=2000000, N
         voxel_origin,
         voxel_size,
         mesh_filename,
-        offset=data['norm_params']['offset'],
-        scale=data['norm_params']['scale'],
+        offset=data['norm_params']['offset'][0], #TODO(rachel0)
+        scale=data['norm_params']['scale'][0],
         level=0.0
     )
 
 def generate_dense_cube(decoder, sampled_data, context_mode, max_batch, N, test_time_optim_steps=None):
-    if context_mode == 'partial':
-        meta_data = levelset_data.meta_split(sampled_data['sdf'].unsqueeze(0),
-                                             sampled_data['partial'].unsqueeze(0),
-                                             context_mode=context_mode)
-    else:
-        meta_data = levelset_data.meta_split(sampled_data['sdf'].unsqueeze(0),
-                                             sampled_data['levelset'].unsqueeze(0),
-                                                 context_mode=context_mode)
+    meta_data = levelset_data.meta_split(sampled_data, context_mode=context_mode)
 
     ####### Use the given SDF samples as context to adapt the meta-network ##########
-    context_x = meta_data['context'][0].cuda()
-    context_y = meta_data['context'][1].cuda()
+    context_x = meta_data['context'][0][0].unsqueeze(0)
+    context_y = meta_data['context'][1][0].unsqueeze(0) # TODO(rachel0) - just picking first view
 
+    print("context_x.shape: ", context_x.shape) # TODO(rachel0) - remove debug statement
+    print("context_y.shape: ", context_y.shape) # TODO(rachel0) - remove debug statement
+    
     with torch.no_grad():
         start_time = time.time()
         params = decoder.generate_params(context_x, context_y, intermediate=False, num_meta_steps=test_time_optim_steps)
@@ -81,4 +78,5 @@ def generate_dense_cube(decoder, sampled_data, context_mode, max_batch, N, test_
             reconstructed_sdf[head:min(head + max_batch, reconstruction_points.shape[0]), 0] = sdf.squeeze(1).detach().cpu()
             head += max_batch
     reconstructed_sdf = reconstructed_sdf.reshape(N, N, N)
+    print("reconstructed_sdf.shape: ", reconstructed_sdf.shape) # TODO(rachel0) - remove debug statement
     return reconstructed_sdf

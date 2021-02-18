@@ -208,54 +208,65 @@ class LevelsetDataset(torch.utils.data.Dataset):
                 new_idx = (new_idx + 1) % len(self)
                 
                 
-def meta_split(sdf_tensor, levelset_tensor, context_mode):    
+def meta_split(data_dict, context_mode):
+    meta_data = {}
+    
+    if 'full_sdf' in data_dict:
+        sdf_tensor = data_dict['full_sdf'].cuda()
+        sdf_tensor.requires_grad = False
+        meta_data['query'] = (sdf_tensor[..., 0:3], sdf_tensor[..., 3:4])
+
+        if context_mode == 'dense':
+            ######## Subsample half of the points as context
+            context_inputs = []
+            context_targets = []
+            test_inputs = []
+            test_targets = []
+
+            batch_size = sdf_tensor.shape[0]
+            for b in range(batch_size):
+                idx = torch.randperm(sdf_tensor[b].shape[0]) # shuffle along points dimension
+                sdf_tensor[b] = sdf_tensor[b][idx]
+
+                context_length = sdf_tensor[b].shape[0]//2
+
+                context_inputs.append(sdf_tensor[b][:context_length, :3])
+                context_targets.append(sdf_tensor[b][:context_length, 3:])
+                test_inputs.append(sdf_tensor[b][context_length:, :3])
+                test_targets.append(sdf_tensor[b][context_length:, 3:])
+
+            context_inputs = torch.stack(context_inputs, dim=0)
+            context_targets = torch.stack(context_targets, dim=0)
+            test_inputs = torch.stack(test_inputs, dim=0)
+            test_targets = torch.stack(test_targets, dim=0)
+
+            meta_data['context'] = (context_inputs, context_targets)
+            #########################
+            return meta_data
+
+    # Use levelset points, 0's as context
     if context_mode == 'levelset':
-        xyz = sdf_tensor[:, :, 0:3]
-        sdf_gt = sdf_tensor[:, :, 3:4]
-        # Use levelset points, 0's as context; full sdf data as test
-        meta_data = {'context':(levelset_tensor, torch.zeros(levelset_tensor.shape[0], levelset_tensor.shape[1], 1)),
-                     'query':(xyz, sdf_gt)}
-        
-        return meta_data
+        levelset_tensor = data_dict['full_surface_pts'].cuda()
+        levelset_tensor.requires_grad = False
+        meta_data['context'] = (levelset_tensor,
+                                torch.zeros(levelset_tensor.shape[0], levelset_tensor.shape[1], 1))
+    elif context_mode == 'partial_surface_pts':
+        partial_surface = data_dict['partial_surface_pts'].cuda()
+        partial_surface.requires_grad = False
 
-    elif context_mode == 'dense':
-        ######## Subsample half of the points as context
-        context_inputs = []
-        context_targets = []
-        test_inputs = []
-        test_targets = []
-        
-        batch_size = sdf_tensor.shape[0]
-        for b in range(batch_size):
-            idx = torch.randperm(sdf_tensor[b].shape[0]) # shuffle along points dimension
-            sdf_tensor[b] = sdf_tensor[b][idx]
-
-            context_length = sdf_tensor[b].shape[0]//2
-
-            context_inputs.append(sdf_tensor[b][:context_length, :3])
-            context_targets.append(sdf_tensor[b][:context_length, 3:])
-            test_inputs.append(sdf_tensor[b][context_length:, :3])
-            test_targets.append(sdf_tensor[b][context_length:, 3:])
-
-        context_inputs = torch.stack(context_inputs, dim=0)
-        context_targets = torch.stack(context_targets, dim=0)
-        test_inputs = torch.stack(test_inputs, dim=0)
-        test_targets = torch.stack(test_targets, dim=0)
-
-        meta_data = {'context':(context_inputs, context_targets),
-                     'query':(sdf_tensor[:,:,:3], sdf_tensor[:,:,3:])}
-        return meta_data
-        #########################
-    elif context_mode == 'partial': # Same as levelset right now, just loading different points
-        xyz = sdf_tensor[:, :, 0:3]
-        sdf_gt = sdf_tensor[:, :, 3:4]
-        # Use partial points, 0's as context; full sdf data as test
-        meta_data = {'context':(levelset_tensor, torch.zeros(levelset_tensor.shape[0], levelset_tensor.shape[1], 1)),
-                     'query':(xyz, sdf_gt)}
-        
-        return meta_data
+        # Input will be (batch_dim, num_views, num_points, 4), so we fold views into the batch dim.
+        if len(partial_surface.shape) == 4:
+            partial_surface = partial_surface.view(-1, *partial_surface.shape[2:])
+            if 'query' in meta_data:
+                meta_data['query'][0] = meta_data['query'][0].view(-1, meta_data['query'][0].shape[2:])
+                meta_data['query'][1] = meta_data['query'][1].view(-1, meta_data['query'][1].shape[2:])
+       
+        # Use partial surface as context; full sdf data as test
+        meta_data['context'] = (partial_surface[...,:3], partial_surface[...,3:])
     else:
         raise NotImplementedError
+
+    return meta_data
         
 def create_samples(N=256, max_batch = 32768, offset=None, scale=None):
     # NOTE: the voxel_origin is actually the (bottom, left, down) corner, not the middle
@@ -305,7 +316,6 @@ def convert_sdf_samples_to_ply(
     start_time = time.time()
 
     numpy_3d_sdf_tensor = pytorch_3d_sdf_tensor.numpy()
-
     verts, faces, normals, values = np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0)
     try:
         verts, faces, normals, values = skimage.measure.marching_cubes_lewiner(
@@ -313,8 +323,6 @@ def convert_sdf_samples_to_ply(
         )
     except:
         pass
-
-    np.save('verts.npy', verts)
 
     # transform from voxel coordinates to camera coordinates
     # note x and y are flipped in the output of marching_cubes
