@@ -57,7 +57,6 @@ def train_epoch(model, dataloader, training_mode, context_mode, optimizer):
         else:
             raise NotImplementedError
 
-        print(batch_loss.item())
         epoch_train_loss += batch_loss.item()
 
         optimizer.zero_grad()

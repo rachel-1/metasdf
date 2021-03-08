@@ -258,8 +258,7 @@ def meta_split(data_dict, context_mode):
         if len(partial_surface.shape) == 4:
             partial_surface = partial_surface.view(-1, *partial_surface.shape[2:])
             if 'query' in meta_data:
-                meta_data['query'][0] = meta_data['query'][0].view(-1, meta_data['query'][0].shape[2:])
-                meta_data['query'][1] = meta_data['query'][1].view(-1, meta_data['query'][1].shape[2:])
+                meta_data['query'] = (meta_data['query'][0].view(-1, *meta_data['query'][0].shape[2:]), meta_data['query'][1].view(-1, *meta_data['query'][1].shape[2:]))
        
         # Use partial surface as context; full sdf data as test
         meta_data['context'] = (partial_surface[...,:3], partial_surface[...,3:])
