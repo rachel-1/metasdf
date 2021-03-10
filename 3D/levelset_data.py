@@ -214,7 +214,7 @@ def meta_split(data_dict, context_mode):
     if 'full_sdf' in data_dict:
         sdf_tensor = data_dict['full_sdf'].cuda()
         sdf_tensor.requires_grad = False
-        meta_data['query'] = (sdf_tensor[..., 0:3], sdf_tensor[..., 3:4])
+        meta_data['query'] = (sdf_tensor[..., 0:-1], sdf_tensor[..., -1:])
 
         if context_mode == 'dense':
             ######## Subsample half of the points as context
@@ -230,10 +230,10 @@ def meta_split(data_dict, context_mode):
 
                 context_length = sdf_tensor[b].shape[0]//2
 
-                context_inputs.append(sdf_tensor[b][:context_length, :3])
-                context_targets.append(sdf_tensor[b][:context_length, 3:])
-                test_inputs.append(sdf_tensor[b][context_length:, :3])
-                test_targets.append(sdf_tensor[b][context_length:, 3:])
+                context_inputs.append(sdf_tensor[b][:context_length, :-1])
+                context_targets.append(sdf_tensor[b][:context_length, -1:])
+                test_inputs.append(sdf_tensor[b][context_length:, :-1])
+                test_targets.append(sdf_tensor[b][context_length:, -1:])
 
             context_inputs = torch.stack(context_inputs, dim=0)
             context_targets = torch.stack(context_targets, dim=0)
@@ -261,7 +261,7 @@ def meta_split(data_dict, context_mode):
                 meta_data['query'] = (meta_data['query'][0].view(-1, *meta_data['query'][0].shape[2:]), meta_data['query'][1].view(-1, *meta_data['query'][1].shape[2:]))
        
         # Use partial surface as context; full sdf data as test
-        meta_data['context'] = (partial_surface[...,:3], partial_surface[...,3:])
+        meta_data['context'] = (partial_surface[...,:-1], partial_surface[...,-1:])
     else:
         raise NotImplementedError
 

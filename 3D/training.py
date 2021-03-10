@@ -24,11 +24,10 @@ def train_epoch(model, dataloader, training_mode, context_mode, optimizer):
     epoch_train_misclassification_percentage = 0
     epoch_train_loss = 0
 
-    for data_dict, indices in dataloader:
-        meta_data = levelset_data.meta_split(data_dict, context_mode)
-
+    for meta_data, indices in dataloader:
+        #meta_data = levelset_data.meta_split(data_dict, context_mode)
         prediction, _ = model(meta_data)
-        query_y = meta_data['query'][1]
+        query_y = meta_data['query_y']
         
         if training_mode == 'multitask':
             gt_sign = (query_y > 0).float()
@@ -74,12 +73,12 @@ def val_epoch(model, dataloader, training_mode, context_mode):
     epoch_loss = 0
 
     model.eval()
-    for data_dict, indices in dataloader:
+    for meta_data, indices in dataloader:
         with torch.no_grad():
-            meta_data = levelset_data.meta_split(data_dict, context_mode)
+            #meta_data = levelset_data.meta_split(data_dict, context_mode)
 
             prediction, _ = model(meta_data)
-            query_y = meta_data['query'][1]
+            query_y = meta_data['query_y']
 
             if training_mode == 'multitask':
                 gt_sign = (query_y > 0).float()

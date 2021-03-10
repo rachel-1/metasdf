@@ -43,17 +43,17 @@ def PEMetaSDF():
 
         return model
     
-def ReLUMetaSDF():
-        hypo_module = ReLUFC(in_features=3, out_features=2,
-                         num_hidden_layers=8, hidden_features=512)
+def ReLUMetaSDF(cfg):
+        hypo_module = ReLUFC(in_features=cfg.in_features, out_features=cfg.out_features,
+                         num_hidden_layers=cfg.num_hidden_layers, hidden_features=cfg.hidden_features)
         hypo_module.apply(sal_init)
         hypo_module.net[-1].apply(sal_init_last_layer)
 
-        model = MetaSDF(hypo_module, inner_maml_multitask_loss, num_meta_steps=5, init_lr=5e-3,
+        model = MetaSDF(hypo_module, inner_maml_multitask_loss, num_meta_steps=cfg.num_meta_steps, init_lr=5e-3,
                         lr_type='per_parameter', first_order=False)
 
         return model
-
+'''
 planes_relu = {
     'model': ReLUMetaSDF(),
     'train_split': '../splits/planes_train.json', # Train split file, following DeepSDF's format
@@ -171,3 +171,4 @@ benches_debug = {
     'reconstruction_output_dir': 'reconstructions/benches_debug',
     'lr': 1e-3,
 }
+'''

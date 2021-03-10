@@ -48,7 +48,7 @@ class MetaSDF(nn.Module):
             for j in range(num_meta_steps):
                 context_x.requires_grad_()
                 predictions = self.hypo_module(context_x, params=adapted_parameters)
-                
+
                 loss = self.loss(predictions, context_y, sigma=self.sigma)
 
                 grads = torch.autograd.grad(loss, adapted_parameters.values(), allow_unused=False, create_graph=(True if (not self.first_order or j == num_meta_steps-1) else False))
@@ -75,13 +75,11 @@ class MetaSDF(nn.Module):
         return output
 
     def forward(self, meta_batch, **kwargs):
-        context_x, context_y = meta_batch['context']
-        query_x = meta_batch['query'][0]
+        query_x = meta_batch['query_x']
 
-        context_x = context_x.cuda()
-        context_y = context_y.cuda()
+        context_x = meta_batch['context_x'].cuda()
+        context_y = meta_batch['context_y'].cuda()
         query_x = query_x.cuda()
-
         fast_params = self.generate_params(context_x, context_y)
         return self.forward_with_params(query_x, fast_params), fast_params
 
