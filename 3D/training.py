@@ -53,6 +53,14 @@ def train_epoch(model, dataloader, training_mode, context_mode, optimizer):
             epoch_train_misclassification_percentage += (torch.sum(torch.sign(prediction[:, :, 0:1]) !=
                     torch.sign(test_gt)).float()/ (test_gt.shape[0]*test_gt.shape[1])).detach().cpu().item()
 
+        elif training_mode == 'bce':
+            gt_sign = (query_y > 0).float()
+            pred = torch.sigmoid(prediction)
+            bce_loss = torch.nn.BCELoss(reduction='none')(pred, gt_sign).mean()
+            batch_loss = bce_loss
+
+            pred_sign = (pred > 0.5).float()
+            epoch_train_misclassification_percentage += (pred_sign != gt_sign).float().mean()
         else:
             raise NotImplementedError
 
@@ -104,6 +112,14 @@ def val_epoch(model, dataloader, training_mode, context_mode):
                 epoch_misclassification_percentage += (torch.sum(torch.sign(prediction[:, :, 0:1]) !=
                         torch.sign(query_y)).float()/ (query_y.shape[0]*query_y.shape[1])).detach().cpu().item()
 
+            elif training_mode == 'bce':
+                gt_sign = (query_y > 0).float()
+                pred = torch.sigmoid(prediction)
+                bce_loss = torch.nn.BCELoss(reduction='none')(pred, gt_sign).mean()
+                batch_loss = bce_loss
+
+                pred_sign = (pred > 0.5).float()
+                epoch_misclassification_percentage += (pred_sign != gt_sign).float().mean()
             else:
                 raise NotImplementedError
 
@@ -129,8 +145,8 @@ def train(model, optimizer, scheduler, dataloader, start_epoch, num_epochs, trai
         
         writer.add_scalar('Loss/Train', epoch_train_loss, epoch)
         writer.add_scalar('Loss/Val', epoch_val_loss, epoch)
-        writer.add_scalar('Misclassified Percentage/Train', epoch_train_misclassification_percentage, epoch)
-        writer.add_scalar('Misclassified Percentage/Val', epoch_val_misclassification_percentage, epoch)
+        writer.add_scalar('Misclassified_Percentage/Train', epoch_train_misclassification_percentage, epoch)
+        writer.add_scalar('Misclassified_Percentage/Val', epoch_val_misclassification_percentage, epoch)
         
         torch.save({'model': model,
                         'optimizer_state_dict': optimizer.state_dict(),

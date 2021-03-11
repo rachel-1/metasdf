@@ -18,6 +18,11 @@ import os
 from meta_modules import *
 from modules import *
 
+def inner_maml_bce_loss(predictions, gt, sigma=None):
+    gt_sign = (gt > 0).float()
+    pred = torch.sigmoid(predictions)
+    return torch.nn.BCELoss(reduction='none')(pred, gt_sign).mean()
+        
 def inner_maml_l1_loss(predictions, gt, sigma=None):
     return torch.abs(predictions - gt).sum(0).mean()
 
@@ -49,7 +54,16 @@ def ReLUMetaSDF(cfg):
         hypo_module.apply(sal_init)
         hypo_module.net[-1].apply(sal_init_last_layer)
 
-        model = MetaSDF(hypo_module, inner_maml_multitask_loss, num_meta_steps=cfg.num_meta_steps, init_lr=5e-3,
+        if cfg.training_mode == 'bce':
+            loss_fn = inner_maml_bce_loss
+        elif cfg.training_mode == 'multitask':
+            loss_fn = inner_maml_bce_loss
+        elif cfg.training_mode == 'l1':
+            loss_fn = inner_maml_l1_loss
+        else:
+            raise NotImplementedError(f"Training mode '{cfg.training_mode}' is not supported!")
+            
+        model = MetaSDF(hypo_module, loss_fn, num_meta_steps=cfg.num_meta_steps, init_lr=5e-3,
                         lr_type='per_parameter', first_order=False)
 
         return model
