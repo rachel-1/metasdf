@@ -57,7 +57,7 @@ def ReLUMetaSDF(cfg):
         if cfg.training_mode == 'bce':
             loss_fn = inner_maml_bce_loss
         elif cfg.training_mode == 'multitask':
-            loss_fn = inner_maml_bce_loss
+            loss_fn = inner_maml_multitask_loss
         elif cfg.training_mode == 'l1':
             loss_fn = inner_maml_l1_loss
         else:
