@@ -27,9 +27,6 @@ def train_epoch(model, dataloader, training_mode, context_mode, optimizer):
     for meta_data, indices in dataloader:
         for key in meta_data:
             meta_data[key] = meta_data[key].cuda()
-            meta_data[key].requires_grad = False
-        #meta_data['query_x'].requires_grad = False
-        #meta_data['context_x'].requires_grad = False
         prediction, _ = model(meta_data)
         query_y = meta_data['query_y']
         
