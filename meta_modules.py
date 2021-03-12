@@ -11,7 +11,6 @@ class MetaSDF(nn.Module):
         self.hypo_module = hypo_module
         self.loss = loss
         self.num_meta_steps = num_meta_steps
-        
         self.first_order = first_order
 
         self.lr_type = lr_type
@@ -46,12 +45,12 @@ class MetaSDF(nn.Module):
             for name, param in self.hypo_module.meta_named_parameters():
                 adapted_parameters[name] = param[None, ...].repeat((meta_batch_size,) + (1,) * len(param.shape))
             for j in range(num_meta_steps):
-                context_x.requires_grad_()
+                context_x.requires_grad_() # TODO - why??
                 predictions = self.hypo_module(context_x, params=adapted_parameters)
 
                 loss = self.loss(predictions, context_y, sigma=self.sigma)
-
-                grads = torch.autograd.grad(loss, adapted_parameters.values(), allow_unused=False, create_graph=(True if (not self.first_order or j == num_meta_steps-1) else False))
+                #grads = torch.autograd.grad(loss, adapted_parameters.values(), allow_unused=False, create_graph=(True if (not self.first_order or j == num_meta_steps-1) else False))
+                grads = torch.autograd.grad(loss, adapted_parameters.values(), allow_unused=False, create_graph=False)
 
                 for i, ((name, param), grad) in enumerate(zip(adapted_parameters.items(), grads)):                    
                     if self.lr_type in ['static', 'global']:
@@ -59,7 +58,8 @@ class MetaSDF(nn.Module):
                     elif self.lr_type in ['per_step']:
                         lr = self.lr[j]
                     elif self.lr_type in ['per_parameter']:
-                        lr = self.lr[i][j] if num_meta_steps <= self.num_meta_steps else 1e-2
+                        #lr = self.lr[i][j] if num_meta_steps <= self.num_meta_steps else 1e-2
+                        lr = self.lr[i][j] if j < self.num_meta_steps else 4e-3
                     elif self.lr_type in ['simple_per_parameter']:
                         lr = self.lr[i]
                     else:
