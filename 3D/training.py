@@ -27,6 +27,7 @@ def train_epoch(model, dataloader, training_mode, context_mode, optimizer):
     for meta_data, indices in dataloader:
         for key in meta_data:
             meta_data[key] = meta_data[key].cuda()
+            meta_data[key].requires_grad = False
         #meta_data['query_x'].requires_grad = False
         #meta_data['context_x'].requires_grad = False
         prediction, _ = model(meta_data)
@@ -143,7 +144,7 @@ def train(model, optimizer, scheduler, dataloader, start_epoch, num_epochs, trai
         scheduler.step()
 
 
-        tqdm.write(f"Epoch: {epoch} \t Train Loss: {epoch_train_loss.item():.4f} \t Train Misclassified %: {epoch_train_misclassification_percentage*100:.2f} \t Val Loss: {epoch_val_loss.item():.4f} \t Val Misclassified %: {epoch_val_misclassification_percentage*100:.2f}\t {output_dir}")
+        tqdm.write(f"Epoch: {epoch} \t Train Loss: {epoch_train_loss:.4f} \t Train Misclassified %: {epoch_train_misclassification_percentage*100:.2f} \t Val Loss: {epoch_val_loss:.4f} \t Val Misclassified %: {epoch_val_misclassification_percentage*100:.2f}\t {output_dir}")
         
         writer.add_scalar('Loss/Train', epoch_train_loss, epoch)
         writer.add_scalar('Loss/Val', epoch_val_loss, epoch)
