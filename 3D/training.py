@@ -25,7 +25,10 @@ def train_epoch(model, dataloader, training_mode, context_mode, optimizer):
     epoch_train_loss = 0
 
     for meta_data, indices in dataloader:
-        #meta_data = levelset_data.meta_split(data_dict, context_mode)
+        for key in meta_data:
+            meta_data[key] = meta_data[key].cuda()
+        #meta_data['query_x'].requires_grad = False
+        #meta_data['context_x'].requires_grad = False
         prediction, _ = model(meta_data)
         query_y = meta_data['query_y']
         
@@ -83,8 +86,8 @@ def val_epoch(model, dataloader, training_mode, context_mode):
     model.eval()
     for meta_data, indices in dataloader:
         with torch.no_grad():
-            #meta_data = levelset_data.meta_split(data_dict, context_mode)
-
+            for key in meta_data:
+                meta_data[key] = meta_data[key].cuda()
             prediction, _ = model(meta_data)
             query_y = meta_data['query_y']
 
@@ -123,7 +126,6 @@ def val_epoch(model, dataloader, training_mode, context_mode):
             else:
                 raise NotImplementedError
 
-            print(batch_loss.item())
             epoch_loss += batch_loss.item()
 
     epoch_misclassification_percentage/=len(dataloader)
@@ -141,7 +143,7 @@ def train(model, optimizer, scheduler, dataloader, start_epoch, num_epochs, trai
         scheduler.step()
 
 
-        tqdm.write(f"Epoch: {epoch} \t Train Misclassified Percentage: {epoch_train_misclassification_percentage} \t Val Misclassified Percentage: {epoch_val_misclassification_percentage}\t {output_dir}")
+        tqdm.write(f"Epoch: {epoch} \t Train Loss: {epoch_train_loss.item():.4f} \t Train Misclassified %: {epoch_train_misclassification_percentage*100:.2f} \t Val Loss: {epoch_val_loss.item():.4f} \t Val Misclassified %: {epoch_val_misclassification_percentage*100:.2f}\t {output_dir}")
         
         writer.add_scalar('Loss/Train', epoch_train_loss, epoch)
         writer.add_scalar('Loss/Val', epoch_val_loss, epoch)
