@@ -70,10 +70,10 @@ def MetaSDF(cfg):
     else:
         raise NotImplementedError(f"Training mode '{cfg.training_mode}' is not supported!")
             
-        model = MetaSDF(hypo_module, loss_fn, num_meta_steps=cfg.num_meta_steps, init_lr=5e-3,
-                        lr_type=cfg.lr_type, first_order=cfg.first_order)
+    model = MetaSDF(hypo_module, loss_fn, num_meta_steps=cfg.num_meta_steps, init_lr=5e-3,
+                    lr_type=cfg.lr_type, first_order=cfg.first_order)
 
-        return model
+    return model
 '''
 planes_relu = {
     'model': ReLUMetaSDF(),
