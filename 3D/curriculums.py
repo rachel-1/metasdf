@@ -49,10 +49,10 @@ def PEMetaSDF():
         return model
     
 def MetaSDF(cfg):
-    if config.fc_type == 'relu':
+    if cfg.fc_type == 'relu':
         hypo_module = ReLUFC(in_features=cfg.in_features, out_features=cfg.out_features,
                          num_hidden_layers=cfg.num_hidden_layers, hidden_features=cfg.hidden_features)
-    elif config.fc_type == 'positional_encoding':
+    elif cfg.fc_type == 'positional_encoding':
         hypo_module = PEFC(in_features=cfg.in_features, out_features=cfg.out_features,
                          num_hidden_layers=cfg.num_hidden_layers, hidden_features=cfg.hidden_features)
     else:
