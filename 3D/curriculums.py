@@ -48,23 +48,30 @@ def PEMetaSDF():
 
         return model
     
-def ReLUMetaSDF(cfg):
+def MetaSDF(cfg):
+    if config.fc_type == 'relu':
         hypo_module = ReLUFC(in_features=cfg.in_features, out_features=cfg.out_features,
                          num_hidden_layers=cfg.num_hidden_layers, hidden_features=cfg.hidden_features)
-        hypo_module.apply(sal_init)
-        hypo_module.net[-1].apply(sal_init_last_layer)
+    elif config.fc_type == 'positional_encoding':
+        hypo_module = PEFC(in_features=cfg.in_features, out_features=cfg.out_features,
+                         num_hidden_layers=cfg.num_hidden_layers, hidden_features=cfg.hidden_features)
+    else:
+        raise NotImplementedError(f"Type '{cfg.fc_type}' is not supported!")
+        
+    hypo_module.apply(sal_init)
+    hypo_module.net[-1].apply(sal_init_last_layer)
 
-        if cfg.training_mode == 'bce':
-            loss_fn = inner_maml_bce_loss
-        elif cfg.training_mode == 'multitask':
-            loss_fn = inner_maml_multitask_loss
-        elif cfg.training_mode == 'l1':
-            loss_fn = inner_maml_l1_loss
-        else:
-            raise NotImplementedError(f"Training mode '{cfg.training_mode}' is not supported!")
+    if cfg.training_mode == 'bce':
+        loss_fn = inner_maml_bce_loss
+    elif cfg.training_mode == 'multitask':
+        loss_fn = inner_maml_multitask_loss
+    elif cfg.training_mode == 'l1':
+        loss_fn = inner_maml_l1_loss
+    else:
+        raise NotImplementedError(f"Training mode '{cfg.training_mode}' is not supported!")
             
         model = MetaSDF(hypo_module, loss_fn, num_meta_steps=cfg.num_meta_steps, init_lr=5e-3,
-                        lr_type='per_parameter', first_order=cfg.first_order)
+                        lr_type=cfg.lr_type, first_order=cfg.first_order)
 
         return model
 '''
