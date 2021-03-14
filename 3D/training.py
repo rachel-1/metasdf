@@ -19,9 +19,9 @@ from torch.utils.tensorboard import SummaryWriter
 torch.backends.cudnn.benchmark = True
 
 
-def train_epoch(model, dataloader, training_mode, context_mode, optimizer):
+def train_epoch(model, dataloader, optimizer, loss_fn):
     model.train()
-    epoch_train_misclassification_percentage = 0
+    misclassification_percentage = 0
     epoch_train_loss = 0
 
     for meta_data, indices in dataloader:
@@ -29,42 +29,12 @@ def train_epoch(model, dataloader, training_mode, context_mode, optimizer):
             meta_data[key] = meta_data[key].cuda()
         prediction, _ = model(meta_data)
         query_y = meta_data['query_y']
-        
-        if training_mode == 'multitask':
-            gt_sign = (query_y > 0).float()
-            pred_sign = torch.sigmoid(prediction[:, :, 0:1])
-            pred_sdf = prediction[:, :, 1:2]
 
-            bce_loss = torch.nn.BCELoss(reduction='none')(pred_sign, gt_sign).mean()
-            l1_loss = torch.abs(torch.where(query_y!=-1., pred_sdf - query_y, torch.zeros_like(pred_sdf))).mean()
-
-            sigma = model.module.sigma_outer
-
-            batch_loss = bce_loss/(2 * sigma[0]**2) + l1_loss/(2 * sigma[1]**2) + torch.log(sigma.prod())
-
-            epoch_train_misclassification_percentage += (torch.sum(torch.sign(prediction[:, :, 0:1]) !=
-                torch.sign(query_y)).float()/ (query_y.shape[0]*query_y.shape[1])).detach().cpu().item()
-
-        elif training_mode == 'l1':
-            pred_sdf = prediction
-
-            l1_loss = torch.abs(pred_sdf - test_gt).mean()
-            batch_loss = l1_loss
-
-            epoch_train_misclassification_percentage += (torch.sum(torch.sign(prediction[:, :, 0:1]) !=
-                    torch.sign(test_gt)).float()/ (test_gt.shape[0]*test_gt.shape[1])).detach().cpu().item()
-
-        elif training_mode == 'bce':
-            gt_sign = (query_y > 0).float()
-            pred = torch.sigmoid(prediction)
-            bce_loss = torch.nn.BCELoss(reduction='none')(pred, gt_sign).mean()
-            batch_loss = bce_loss
-
-            pred_sign = (pred > 0.5).float()
-            epoch_train_misclassification_percentage += (pred_sign != gt_sign).float().mean()
-        else:
-            raise NotImplementedError
-
+        batch_size, num_query_points, channels = prediction.shape
+        batch_loss = loss_fn(prediction, query_y, model.module.sigma_outer)
+        pred_sign = (prediction[...,0] > 0.5).float() if channels == 1 else torch.sign(prediction[...,0])
+        gt_sign = torch.sign(query_y[...,-1])
+        misclassification_percentage += (pred_sign != gt_sign).float().mean().detach().cpu().item()
         epoch_train_loss += batch_loss.item()
 
         optimizer.zero_grad()
@@ -72,13 +42,13 @@ def train_epoch(model, dataloader, training_mode, context_mode, optimizer):
         torch.nn.utils.clip_grad_value_(model.parameters(), 0.5)
         optimizer.step()
 
-    epoch_train_misclassification_percentage/=len(dataloader)
-    epoch_train_loss/=len(dataloader)
+    misclassification_percentage /= len(dataloader)
+    epoch_train_loss /= len(dataloader)
     
-    return epoch_train_loss, epoch_train_misclassification_percentage
+    return epoch_train_loss, misclassification_percentage
     
-def val_epoch(model, dataloader, training_mode, context_mode):
-    epoch_misclassification_percentage = 0
+def val_epoch(model, dataloader, loss_fn):
+    misclassification_percentage = 0
     epoch_loss = 0
 
     model.eval()
@@ -89,54 +59,24 @@ def val_epoch(model, dataloader, training_mode, context_mode):
             prediction, _ = model(meta_data)
             query_y = meta_data['query_y']
 
-            if training_mode == 'multitask':
-                gt_sign = (query_y > 0).float()
-                pred_sign = torch.sigmoid(prediction[:, :, 0:1])
-                pred_sdf = prediction[:, :, 1:2]
-
-                bce_loss = torch.nn.BCELoss(reduction='none')(pred_sign, gt_sign).mean()
-                l1_loss = torch.abs(torch.where(query_y!=-1., pred_sdf - query_y, torch.zeros_like(pred_sdf))).mean()
-
-                sigma = model.module.sigma_outer
-
-                batch_loss = bce_loss/(2 * sigma[0]**2) + l1_loss/(2 * sigma[1]**2) + torch.log(sigma.prod())
-
-                epoch_misclassification_percentage += (torch.sum(torch.sign(prediction[:, :, 0:1]) !=
-                    torch.sign(query_y)).float()/ (query_y.shape[0]*query_y.shape[1])).detach().cpu().item()
-
-            elif training_mode == 'l1':
-                pred_sdf = prediction
-
-                l1_loss = torch.abs(pred_sdf - query_y).mean()
-                batch_loss = l1_loss
-
-                epoch_misclassification_percentage += (torch.sum(torch.sign(prediction[:, :, 0:1]) !=
-                        torch.sign(query_y)).float()/ (query_y.shape[0]*query_y.shape[1])).detach().cpu().item()
-
-            elif training_mode == 'bce':
-                gt_sign = (query_y > 0).float()
-                pred = torch.sigmoid(prediction)
-                bce_loss = torch.nn.BCELoss(reduction='none')(pred, gt_sign).mean()
-                batch_loss = bce_loss
-
-                pred_sign = (pred > 0.5).float()
-                epoch_misclassification_percentage += (pred_sign != gt_sign).float().mean()
-            else:
-                raise NotImplementedError
-
+            batch_size, num_query_points, channels = prediction.shape
+            batch_loss = loss_fn(prediction, query_y, model.module.sigma_outer)
+            pred_sign = (prediction[...,0] > 0.5).float() if channels == 1 else torch.sign(prediction[...,0])
+            gt_sign = torch.sign(query_y[...,-1])
+            misclassification_percentage += (pred_sign != gt_sign).float().mean().detach().cpu().item()
             epoch_loss += batch_loss.item()
 
-    epoch_misclassification_percentage/=len(dataloader)
-    epoch_loss/=len(dataloader)
-    return epoch_loss, epoch_misclassification_percentage
+    misclassification_percentage /= len(dataloader)
+    epoch_loss /= len(dataloader)
+    return epoch_loss, misclassification_percentage
 
-def train(model, optimizer, scheduler, dataloader, start_epoch, num_epochs, training_mode, context_mode, output_dir='./model_parameters/', save_freq=100, val_dataloader=None):
+def train(model, optimizer, scheduler, dataloader, start_epoch, num_epochs, training_mode, output_dir='./model_parameters/', save_freq=100, val_dataloader=None, loss_fn=None):
     writer = SummaryWriter(output_dir)
         
     for epoch in tqdm(range(start_epoch, num_epochs + 1)):
         
-        epoch_train_loss, epoch_train_misclassification_percentage = train_epoch(model, dataloader, training_mode, context_mode, optimizer)
-        epoch_val_loss, epoch_val_misclassification_percentage = val_epoch(model, val_dataloader, training_mode, context_mode)
+        epoch_train_loss, epoch_train_misclassification_percentage = train_epoch(model, dataloader, optimizer, loss_fn)
+        epoch_val_loss, epoch_val_misclassification_percentage = val_epoch(model, val_dataloader, loss_fn)
         
         scheduler.step()
 

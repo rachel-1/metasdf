@@ -18,21 +18,32 @@ import os
 from meta_modules import *
 from modules import *
 
-def inner_maml_bce_loss(predictions, gt, sigma=None):
+def bce_loss(is_inner, predictions, gt, sigma=None):
     gt_sign = (gt > 0).float()
     pred = torch.sigmoid(predictions)
-    return torch.nn.BCELoss(reduction='none')(pred, gt_sign).mean()
+    if is_inner:
+        return torch.nn.BCELoss(reduction='none')(pred, gt_sign).sum(0).mean()
+    else:
+        return torch.nn.BCELoss(reduction='none')(pred, gt_sign).mean()
         
-def inner_maml_l1_loss(predictions, gt, sigma=None):
-    return torch.abs(predictions - gt).sum(0).mean()
+def l1_loss(is_inner, predictions, gt, sigma=None):
+    if is_inner:
+        return torch.abs(predictions - gt).sum(0).mean()
+    else:
+        return torch.abs(predictions - gt).mean()
 
-def inner_maml_multitask_loss(pred_input, gt_sdf, sigma):
+def multitask_loss(pred_input, gt_sdf, sigma):
     gt_sign = (gt_sdf > 0).float()
     pred_sign = torch.sigmoid(pred_input[:, :, 0:1])
     pred_sdf = pred_input[:, :, 1:2]
+
+    print("torch.nn.BCELoss(reduction='none')(pred_sign, gt_sign).shape: ", torch.nn.BCELoss(reduction='none')(pred_sign, gt_sign).shape) # TODO(rachel0) - remove debug statement
     
     bce_loss = torch.nn.BCELoss(reduction='none')(pred_sign, gt_sign).sum(0).mean()
+    #bce_loss = torch.nn.BCELoss(reduction='none')(pred_sign, gt_sign).mean()
+
     l1_loss = torch.abs(pred_sdf - gt_sdf).sum(0).mean()
+    #l1_loss = torch.abs(torch.where(query_y!=-1., pred_sdf - gt_sdf, torch.zeros_like(pred_sdf))).mean()
         
     l = bce_loss/(2 * sigma[0]**2) + l1_loss/(2 * sigma[1]**2) + torch.log(sigma.prod())
     return l
@@ -48,25 +59,22 @@ def PEMetaSDF():
 
         return model
     
-def MetaSDFBuilder(cfg):
-    if cfg.fc_type == 'relu':
-        hypo_module = ReLUFC(in_features=cfg.in_features, out_features=cfg.out_features,
-                             num_hidden_layers=cfg.num_hidden_layers, hidden_features=cfg.hidden_features, skip_connect=cfg.skip_connect)
-    elif cfg.fc_type == 'positional_encoding':
-        hypo_module = PEFC(in_features=cfg.in_features, out_features=cfg.out_features,
-                           num_hidden_layers=cfg.num_hidden_layers, hidden_features=cfg.hidden_features, skip_connect=cfg.skip_connect)
-    else:
-        raise NotImplementedError(f"Type '{cfg.fc_type}' is not supported!")
-        
+def create_MetaSDF(cfg):
+    hypo_module = FullyConnectedNet(in_features=cfg.in_features,
+                                    out_features=cfg.out_features,
+                                    num_hidden_layers=cfg.num_hidden_layers,
+                                    hidden_features=cfg.hidden_features,
+                                    positional_encoding=cfg.positional_encoding,
+                                    skip_connect=cfg.skip_connect)
     hypo_module.apply(sal_init)
     hypo_module.net[-1].apply(sal_init_last_layer)
 
     if cfg.training_mode == 'bce':
-        loss_fn = inner_maml_bce_loss
+        loss_fn = bce_loss
     elif cfg.training_mode == 'multitask':
-        loss_fn = inner_maml_multitask_loss
+        loss_fn = multitask_loss
     elif cfg.training_mode == 'l1':
-        loss_fn = inner_maml_l1_loss
+        loss_fn = l1_loss
     else:
         raise NotImplementedError(f"Training mode '{cfg.training_mode}' is not supported!")
             

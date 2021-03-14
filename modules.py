@@ -112,17 +112,26 @@ class Embedding(nn.Module):
 
         return torch.cat(out, -1)
         
-class PEFC(MetaModule):
-    def __init__(self, in_features, out_features, num_hidden_layers, hidden_features, skip_connect=False):
+class MetaFCNet(MetaModule):
+    def __init__(self, in_features, out_features, num_hidden_layers,
+                 hidden_features, positional_encoding, skip_connect):
         super().__init__()
+        self.net = []
 
-        embedding_dim=22 if in_features==2 else 33
-        self.net = [Embedding(in_features, 5)]
+        # If using positional encoding, prepend the embedding layer.
+        if positional_encoding:
+            embedding_dim=22 if in_features==2 else 33
+            self.net.append(Embedding(in_features, 5))
+            in_features = embedding_dim
+
+        # If we are using a skip connection, we use a ResidualBlock to cover the
+        # first half of the hidden layers.    
         if skip_connect:
-            self.net.append(ResidualBlock(embedding_dim, num_hidden_layers // 2, hidden_features))
-            embedding_dim += hidden_features
+            self.net.append(ResidualBlock(in_features, num_hidden_layers // 2, hidden_features))
+            in_features += hidden_features
             num_hidden_layers -= num_hidden_layers // 2 + 1
-        self.net.append(BatchLinear(embedding_dim, hidden_features))
+            
+        self.net.append(BatchLinear(in_features, hidden_features))
         self.net.append(nn.ReLU(inplace=True))
 
         for i in range(num_hidden_layers):
@@ -130,28 +139,6 @@ class PEFC(MetaModule):
             self.net.append(nn.ReLU(inplace=True))
 
         self.net.append(BatchLinear(hidden_features, out_features))
-
-        self.net = MetaSequential(*self.net)
-        
-    def forward(self, coords, params=None, **kwargs):
-        output = self.net(coords, params=self.get_subdict(params, 'net'))
-        return output
-    
-    
-class ReLUFC(MetaModule):
-    def __init__(self, in_features, out_features, num_hidden_layers, hidden_features):
-        super().__init__()
-
-        #self.net = [BatchLinear(in_features, hidden_features), nn.ReLU(inplace=True)]
-        self.net = [ResidualBlock(in_features, num_hidden_layers // 2, hidden_features)]
-        self.net.append(BatchLinear(hidden_features+in_features, hidden_features))
-                    
-        for i in range(num_hidden_layers // 2):
-            self.net.append(BatchLinear(hidden_features, hidden_features))
-            self.net.append(nn.ReLU(inplace=True))
-        
-        self.net.append(BatchLinear(hidden_features, out_features))
-
         self.net = MetaSequential(*self.net)
         
     def forward(self, coords, params=None, **kwargs):
