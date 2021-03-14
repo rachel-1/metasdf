@@ -61,7 +61,22 @@ class BatchLinear(nn.Linear, MetaModule):
         output += bias.unsqueeze(-2)
         return output
 
-
+class ResidualBlock(MetaModule):
+    def __init__(self, in_features, num_hidden_layers, hidden_features):
+        super(ResidualBlock, self).__init__()
+        self.layers = nn.ModuleList()
+        self.layers.append(BatchLinear(in_features, hidden_features))
+        for i in range(num_hidden_layers):
+            self.layers.append(BatchLinear(hidden_features, hidden_features))
+        self.relu = nn.ReLU(inplace=True)
+        
+    def forward(self, x, params=None):
+        out = x
+        for name, layer in self.layers._modules.items():
+            out = self.relu(layer(out, self.get_subdict(params, f"layers.{name}")))
+            
+        return torch.cat([x, out], -1)
+    
 class Embedding(nn.Module):
     def __init__(self, in_channels, N_freqs, logscale=True):
         """
@@ -96,14 +111,19 @@ class Embedding(nn.Module):
                 out += [func(freq*x)]
 
         return torch.cat(out, -1)
-    
-
+        
 class PEFC(MetaModule):
-    def __init__(self, in_features, out_features, num_hidden_layers, hidden_features):
+    def __init__(self, in_features, out_features, num_hidden_layers, hidden_features, skip_connect=False):
         super().__init__()
 
         embedding_dim=22 if in_features==2 else 33
-        self.net = [Embedding(in_features, 5), BatchLinear(embedding_dim, hidden_features), nn.ReLU(inplace=True)]
+        self.net = [Embedding(in_features, 5)]
+        if skip_connect:
+            self.net.append(ResidualBlock(embedding_dim, num_hidden_layers // 2, hidden_features))
+            embedding_dim += hidden_features
+            num_hidden_layers -= num_hidden_layers // 2 + 1
+        self.net.append(BatchLinear(embedding_dim, hidden_features))
+        self.net.append(nn.ReLU(inplace=True))
 
         for i in range(num_hidden_layers):
             self.net.append(BatchLinear(hidden_features, hidden_features))
@@ -122,12 +142,14 @@ class ReLUFC(MetaModule):
     def __init__(self, in_features, out_features, num_hidden_layers, hidden_features):
         super().__init__()
 
-        self.net = [BatchLinear(in_features, hidden_features), nn.ReLU(inplace=True)]
-
-        for i in range(num_hidden_layers):
+        #self.net = [BatchLinear(in_features, hidden_features), nn.ReLU(inplace=True)]
+        self.net = [ResidualBlock(in_features, num_hidden_layers // 2, hidden_features)]
+        self.net.append(BatchLinear(hidden_features+in_features, hidden_features))
+                    
+        for i in range(num_hidden_layers // 2):
             self.net.append(BatchLinear(hidden_features, hidden_features))
             self.net.append(nn.ReLU(inplace=True))
-
+        
         self.net.append(BatchLinear(hidden_features, out_features))
 
         self.net = MetaSequential(*self.net)
