@@ -18,7 +18,7 @@ import os
 from meta_modules import *
 from modules import *
 
-def bce_loss(is_inner, predictions, gt, sigma=None):
+def bce_loss(predictions, gt, sigma=None):
     gt_sign = (gt > 0).float()
     pred = torch.sigmoid(predictions)
     if is_inner:
@@ -32,18 +32,14 @@ def l1_loss(is_inner, predictions, gt, sigma=None):
     else:
         return torch.abs(predictions - gt).mean()
 
-def multitask_loss(pred_input, gt_sdf, sigma):
+def inner_maml_multitask_loss(pred_input, gt_sdf, sigma):
     gt_sign = (gt_sdf > 0).float()
     pred_sign = torch.sigmoid(pred_input[:, :, 0:1])
     pred_sdf = pred_input[:, :, 1:2]
 
-    print("torch.nn.BCELoss(reduction='none')(pred_sign, gt_sign).shape: ", torch.nn.BCELoss(reduction='none')(pred_sign, gt_sign).shape) # TODO(rachel0) - remove debug statement
-    
     bce_loss = torch.nn.BCELoss(reduction='none')(pred_sign, gt_sign).sum(0).mean()
-    #bce_loss = torch.nn.BCELoss(reduction='none')(pred_sign, gt_sign).mean()
 
     l1_loss = torch.abs(pred_sdf - gt_sdf).sum(0).mean()
-    #l1_loss = torch.abs(torch.where(query_y!=-1., pred_sdf - gt_sdf, torch.zeros_like(pred_sdf))).mean()
         
     l = bce_loss/(2 * sigma[0]**2) + l1_loss/(2 * sigma[1]**2) + torch.log(sigma.prod())
     return l

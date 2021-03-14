@@ -111,7 +111,46 @@ class Embedding(nn.Module):
                 out += [func(freq*x)]
 
         return torch.cat(out, -1)
+
+
+class PEFC(MetaModule):
+    def __init__(self, in_features, out_features, num_hidden_layers, hidden_features):
+        super().__init__()
+
+        embedding_dim=22 if in_features==2 else 33
+        self.net = [Embedding(in_features, 5), BatchLinear(embedding_dim, hidden_features), nn.ReLU(inplace=True)]
+
+        for i in range(num_hidden_layers):
+            self.net.append(BatchLinear(hidden_features, hidden_features))
+            self.net.append(nn.ReLU(inplace=True))
+
+        self.net.append(BatchLinear(hidden_features, out_features))
+
+        self.net = MetaSequential(*self.net)
         
+    def forward(self, coords, params=None, **kwargs):
+        output = self.net(coords, params=self.get_subdict(params, 'net'))
+        return output
+    
+    
+class ReLUFC(MetaModule):
+    def __init__(self, in_features, out_features, num_hidden_layers, hidden_features):
+        super().__init__()
+
+        self.net = [BatchLinear(in_features, hidden_features), nn.ReLU(inplace=True)]
+
+        for i in range(num_hidden_layers):
+            self.net.append(BatchLinear(hidden_features, hidden_features))
+            self.net.append(nn.ReLU(inplace=True))
+
+        self.net.append(BatchLinear(hidden_features, out_features))
+
+        self.net = MetaSequential(*self.net)
+        
+    def forward(self, coords, params=None, **kwargs):
+        output = self.net(coords, params=self.get_subdict(params, 'net'))
+        return output
+    
 class MetaFCNet(MetaModule):
     def __init__(self, in_features, out_features, num_hidden_layers,
                  hidden_features, positional_encoding, skip_connect):
