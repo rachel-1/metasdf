@@ -50,7 +50,6 @@ class MetaSDF(nn.Module):
 
                 loss = self.loss(predictions, context_y, sigma=self.sigma)
                 grads = torch.autograd.grad(loss, adapted_parameters.values(), allow_unused=False, create_graph=(True if (not self.first_order or j == num_meta_steps-1) else False))
-                #grads = torch.autograd.grad(loss, adapted_parameters.values(), allow_unused=False, create_graph=False)
 
                 for i, ((name, param), grad) in enumerate(zip(adapted_parameters.items(), grads)):                    
                     if self.lr_type in ['static', 'global']:

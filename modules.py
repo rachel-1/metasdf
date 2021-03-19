@@ -153,10 +153,19 @@ class ReLUFC(MetaModule):
     
 class MetaFCNet(MetaModule):
     def __init__(self, in_features, out_features, num_hidden_layers,
-                 hidden_features, positional_encoding, skip_connect):
+                 hidden_features, positional_encoding, skip_connect,
+                 features_only=False):
         super().__init__()
         self.net = []
 
+        # Save all the parameters (to be easily viewable by downstream code).
+        self.hyperparams = dict(in_features=in_features,
+                                out_features=out_features,
+                                num_hidden_layers=num_hidden_layers,
+                                hidden_features=hidden_features,
+                                positional_encoding=positional_encoding,
+                                skip_connect=skip_connect)
+        
         # If using positional encoding, prepend the embedding layer.
         if positional_encoding:
             embedding_dim=22 if in_features==2 else 33
@@ -175,11 +184,29 @@ class MetaFCNet(MetaModule):
 
         for i in range(num_hidden_layers):
             self.net.append(BatchLinear(hidden_features, hidden_features))
-            self.net.append(nn.ReLU(inplace=True))
+            if not features_only or i != num_hidden_layers - 1:
+                self.net.append(nn.ReLU(inplace=True))
 
-        self.net.append(BatchLinear(hidden_features, out_features))
+        if not features_only: self.net.append(BatchLinear(hidden_features, out_features))
         self.net = MetaSequential(*self.net)
         
     def forward(self, coords, params=None, **kwargs):
         output = self.net(coords, params=self.get_subdict(params, 'net'))
         return output
+
+class ClassifierMLP(nn.Module):
+    def __init__(self, in_feat, hidden_dim, num_hidden, num_classes):
+        super().__init__()
+        classifier_layers = [nn.Linear(in_feat, hidden_dim), nn.ReLU()]
+        for i in range(num_hidden):
+            classifier_layers.append(nn.Linear(hidden_dim, hidden_dim))
+            classifier_layers.append(nn.ReLU())
+        classifier_layers.append(nn.Linear(hidden_dim, num_classes))
+        self.classifier = nn.Sequential(*classifier_layers)
+        
+    def forward(self, features):
+        scores = self.classifier(features)
+        return scores
+        
+
+        
